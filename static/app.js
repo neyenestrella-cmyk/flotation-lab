@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const state = {meta:null, result:null, config:null, frame:0, playing:false, previousTime:0, request:0};
 const format = (v, digits=1) => Number.isFinite(v) ? v.toLocaleString("es-PE", {minimumFractionDigits:digits,maximumFractionDigits:digits}) : "—";
 const color = {pi:"#d48a43",ff:"#118f93",sp:"#748a8b"};
+const tankXs = [139, 351, 563];
 let toastTimer, simcTimer, simcRequest=0;
 
 function toast(message){$("toast").textContent=message;$("toast").hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").hidden=true,3800);}
@@ -59,6 +60,7 @@ async function run(){
     const result=await (await api("/api/simulate",config)).json();
     if(requestId!==state.request)return;
     state.result=result;state.config=config;state.frame=0;
+    state.tankRanges = calculateTankRanges(result);
     $("engine-status").className="engine-status online";$("engine-status").innerHTML="<i></i> Motor Python conectado";
     renderResults();renderPlant();drawFrame();
     $("run-state").textContent=JSON.stringify(config)===JSON.stringify(readConfig()) ? `Ensayo calculado · ${result.feedback.data.t.length} muestras · ${format((performance.now()-before)/1000,2)} s de cálculo y transferencia.` : "Ensayo calculado. Hay cambios pendientes por ejecutar.";
@@ -115,8 +117,29 @@ function renderResults(){
   $("interpretation-text").textContent=description;
 }
 
+function calculateTankRanges(result) {
+  return tankXs.map((_, cell) => {
+    const levels = [result.feedback.data, result.feedforward.data].flatMap(data =>
+      [...data.level, ...data.setpoint].map(values => values[cell]));
+    const min = Math.min(...levels);
+    const max = Math.max(...levels);
+    const padding = Math.max(0.1, (max - min) * 0.15, (1 - (max - min)) / 2);
+    return [Math.floor((min - padding) * 10) / 10, Math.ceil((max + padding) * 10) / 10];
+  });
+}
+
+function showTankScale() {
+  const zoom = $("plant-scale").value === "zoom";
+  $("plant-scale-note").textContent = zoom
+    ? "Nivel ampliado para ver cambios pequeños. Cada celda indica su escala en cm. Δ es el cambio desde el inicio."
+    : "La altura de los tanques representa de 0 a 45 cm. Δ es el cambio desde el inicio.";
+  tankXs.forEach((_, i) => {
+    const [low, high] = zoom ? state.tankRanges[i] : [0, 45];
+    $("tank-range-" + i).textContent = `${format(low)}–${format(high)} cm`;
+  });
+}
+
 function renderPlant(){
-  const tankXs=[139,351,563];
   let svg=`<svg viewBox="0 0 800 315" xmlns="http://www.w3.org/2000/svg"><defs>
   <linearGradient id="steel" x1="0" x2="1"><stop stop-color="#b8c5c9"/><stop offset=".18" stop-color="#f1f5f5"/><stop offset=".75" stop-color="#c8d3d6"/><stop offset="1" stop-color="#94a7ae"/></linearGradient>
   <linearGradient id="side-steel" x1="0" x2="1"><stop stop-color="#a6b9c0"/><stop offset="1" stop-color="#dae3e5"/></linearGradient>
@@ -139,7 +162,8 @@ function renderPlant(){
     <rect x="${x+19}" y="${top+8}" width="84" height="146" rx="2" fill="#eaf4f8" stroke="#afc9d0"/>
     <rect id="water-${i}" x="${x+20}" y="130" width="82" height="105" fill="url(#water)"/>
     <path id="surface-${i}" d="M${x+20} 130h82" stroke="#9de7fb" stroke-width="3"/>
-    <g fill="#d2f4ff" opacity=".6">${[0,1,2,3,4,5,6].map((j)=>`<circle class="bubble" cx="${x+28+(j*29)%62}" cy="${208+(j*7)%22}" r="${1.2+(j%3)*.5}"/>`).join("")}</g>
+    <clipPath id="water-clip-${i}"><use href="#water-${i}"/></clipPath>
+    <g fill="#d2f4ff" opacity=".6" clip-path="url(#water-clip-${i})">${[0,1,2,3,4,5,6].map((j)=>`<circle class="bubble" cx="${x+28+(j*29)%62}" cy="${208+(j*7)%22}" r="${1.2+(j%3)*.5}"/>`).join("")}</g>
     <rect x="${x+20}" y="${top+9}" width="10" height="144" fill="white" opacity=".16"/>
     <path id="sp-${i}" d="M${x+14} 128h95" stroke="#566c82" stroke-dasharray="4 3" stroke-width="1.3"/>
     <text id="sp-label-${i}" x="${x+19}" y="121" font-size="7" fill="#576c82">SP 30.0</text>
@@ -152,17 +176,27 @@ function renderPlant(){
     <g transform="translate(${x+w+42} 212)"><path d="M-18 14H20" stroke="#7e969b" stroke-width="4"/><rect x="-8" y="-10" width="25" height="22" rx="3" fill="url(#pump)" stroke="#196d7e"/><path d="M-1-8V10M4-8V10M9-8V10" stroke="#4db4c3"/><circle r="10" cx="-10" fill="#188ba4" stroke="#176b7e"/><g transform="translate(-10 0)"><path class="pump-blade" d="M-5 0H5M0-5V5" stroke="#bfe9f0" stroke-width="1.5"/></g><circle id="pump-light-${i}" cx="15" cy="-17" r="3.5" fill="#42c778" stroke="#299657"/><text x="0" y="35" text-anchor="middle" font-size="8" fill="#4f7a88">P-${i+1}</text><text id="pump-flow-${i}" x="0" y="-29" text-anchor="middle" font-size="9" fill="#318aaa" font-family="Consolas,monospace">45.0</text></g></g>`;
   });
   svg+="</svg>";$("plant").innerHTML=svg;
-  $("cell-readings").innerHTML=[0,1,2].map(i=>`<div class="cell-reading"><span>NIVEL C-0${i+1}</span><div><strong id="level-${i}">—</strong> <small>cm</small></div></div>`).join("");
+  $("cell-readings").innerHTML=tankXs.map((_, i)=>`<div class="cell-reading"><span>C-0${i+1}<br><small id="tank-range-${i}">—</small></span><div><strong id="level-${i}">—</strong> <small>cm</small><br><small id="level-delta-${i}">Δ 0.00 cm</small></div></div>`).join("");
+  if (state.result) showTankScale();
 }
 function drawFrame(){
   if(!state.result)return;
   const k=Math.min(state.config.duration,Math.floor(state.frame));const strategy=$("plant-strategy").value;const d=state.result[strategy].data;
   $("timeline").value=k;$("play-time").textContent=`${String(k).padStart(3,"0")} / ${state.config.duration} s`;
   $("feed-label").textContent=`${format(d.inlet[k][0])} L/min`;
-  [0,1,2].forEach(i=>{
-    const level=d.level[k][i],sp=d.setpoint[k][i],y=235-Math.max(0,Math.min(45,level))/45*145,spY=235-sp/45*145;
-    $("water-"+i).setAttribute("y",y);$("water-"+i).setAttribute("height",235-y);$("surface-"+i).setAttribute("d",`M${[139,351,563][i]+20} ${y}h82`);
-    $("sp-"+i).setAttribute("d",`M${[139,351,563][i]+14} ${spY}h95`);$("sp-label-"+i).setAttribute("y",spY-5);$("sp-label-"+i).textContent=`SP ${format(sp)}`;
+  const zoom = $("plant-scale").value === "zoom";
+  tankXs.forEach((x, i)=>{
+    const level = d.level[k][i];
+    const sp = d.setpoint[k][i];
+    const [low, high] = zoom ? state.tankRanges[i] : [0, 45];
+    const heightToY = value => 235 - 145 * (Math.min(high, Math.max(low, value)) - low) / (high - low);
+    const y = heightToY(level);
+    const spY = heightToY(sp);
+    $("water-"+i).setAttribute("y",y);$("water-"+i).setAttribute("height",235-y);$("surface-"+i).setAttribute("d",`M${x+20} ${y}h82`);
+    $("sp-"+i).setAttribute("d",`M${x+14} ${spY}h95`);$("sp-label-"+i).setAttribute("y",Math.max(99,spY-5));$("sp-label-"+i).textContent=`SP ${format(sp)}`;
+    const delta = level - d.level[0][i];
+    const sign = Math.abs(delta) < 0.005 ? "" : delta > 0 ? "+" : "−";
+    $("level-delta-" + i).textContent = `Δ ${sign}${format(Math.abs(delta), 2)} cm`;
     $("level-"+i).textContent=format(level,2);$("sensor-"+i).textContent=format(d.measured[k][i]);$("pump-flow-"+i).textContent=`${format(d.outlet[k][i])} L/min`;
     const saturated=d.command[k][i]<1e-8||d.command[k][i]>state.meta.pump_max[i]-1e-8;
     $("pump-light-"+i).setAttribute("fill",saturated?"#ec9c32":d.outlet[k][i]>.01?"#50c67b":"#abb6b7");
@@ -204,6 +238,11 @@ $("jump-event").addEventListener("click", () => {
   drawFrame();
 });
 $("plant-strategy").addEventListener("change",drawFrame);$("signal-cell").addEventListener("change",drawFrame);
+$("plant-scale").addEventListener("change", () => {
+  if (!state.result) return;
+  showTankScale();
+  drawFrame();
+});
 $("simc-cell").addEventListener("change",()=>{$("simc-tau").value=[7,6,3][Number($("simc-cell").value)];updateSimc();});
 $("simc-tau").addEventListener("input",()=>{clearTimeout(simcTimer);simcTimer=setTimeout(updateSimc,300);});
 document.querySelectorAll("[data-export]").forEach(button=>button.addEventListener("click",()=>download(button.dataset.export,button)));
