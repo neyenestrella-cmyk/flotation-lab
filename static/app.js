@@ -96,6 +96,9 @@ function renderResults(){
   $("stat-change").textContent=format(summary.improvement_pct,1);
   $("change-caption").textContent=summary.improvement_pct===null?"Sin error acumulado para comparar":summary.improvement_pct < -.05?"Valor negativo: el IAE aumentó":summary.improvement_pct>.05?"Menor error en este ensayo":"Desempeño equivalente en IAE";
   $("timeline").max=c.duration;$("timeline").value=0;
+  const event = r.events[0];
+  $("jump-event").hidden = !event;
+  if (event) $("jump-event").textContent = `Ir al primer evento · ${event.t} s`;
   $("simulation-warnings").hidden=!r.warnings.length;$("simulation-warnings").textContent=r.warnings.join(" ");
   $("result-context").textContent=`${state.meta.scenarios[c.scenario]} · ${c.duration} s · feedforward ${c.ff_mode==="literal"?"literal (ecs. 7–8)":"sostenido (extensión)"} · ruido σ = ${format(c.noise,2)} cm · filtro ${c.median_filter?"activado":"desactivado"}. Resultados del último ensayo ejecutado.`;
   let table="";
@@ -193,6 +196,13 @@ $("config-form").addEventListener("input",()=>updateFields());
 $("reset").addEventListener("click",()=>{$("config-form").reset();updateFields();toast("Parámetros restablecidos. Ejecuta para actualizar los resultados.");});
 $("play").addEventListener("click",()=>{if(!state.playing)play();});$("pause").addEventListener("click",pause);
 $("timeline").addEventListener("input",()=>{pause();state.frame=Number($("timeline").value);drawFrame();});
+$("jump-event").addEventListener("click", () => {
+  const event = state.result?.events[0];
+  if (!event) return;
+  pause();
+  state.frame = event.t;
+  drawFrame();
+});
 $("plant-strategy").addEventListener("change",drawFrame);$("signal-cell").addEventListener("change",drawFrame);
 $("simc-cell").addEventListener("change",()=>{$("simc-tau").value=[7,6,3][Number($("simc-cell").value)];updateSimc();});
 $("simc-tau").addEventListener("input",()=>{clearTimeout(simcTimer);simcTimer=setTimeout(updateSimc,300);});
