@@ -42,20 +42,20 @@
             <div id="plant" class="plant" role="img" aria-label="Esquema animado de tres celdas de flotación en serie"></div>
             <div class="cell-readings" id="cell-readings"></div>
             <div class="playback"><div class="transport"><button id="play" class="hmi-button start" aria-label="Iniciar reproducción" title="Iniciar reproducción"><i></i><span>INICIAR</span></button><button id="pause" class="hmi-button stop" aria-label="Pausar reproducción" title="Pausar reproducción"><i></i><span>PAUSAR</span></button></div><span id="play-time" class="mono">000 / 900 s</span><input type="range" id="timeline" aria-label="Tiempo de la simulación" min="0" max="900" value="0"><select id="speed" aria-label="Velocidad de reproducción"><option value="10">10×</option><option value="30" selected>30×</option><option value="60">60×</option></select></div>
-            <div class="hmi-status"><span id="hmi-status-text">● Reproducción en pausa</span><span>HMI didáctico · señales virtuales</span></div>
+            <div class="hmi-status"><span id="hmi-status-text">● Reproducción en pausa</span><button type="button" id="jump-event" class="secondary-button" hidden></button></div>
           </article>
           <details class="panel signals-panel" id="signals-panel" open><summary>Monitor de instrumentación <span>SEÑALES EN EL INSTANTE SELECCIONADO</span></summary><div class="signals-content"><div class="signal-top"><p>Inspecciona el sensor, el controlador y la bomba de una celda.</p><select id="signal-cell" aria-label="Celda para inspeccionar señales"><option value="0">Celda 01</option><option value="1">Celda 02</option><option value="2">Celda 03</option></select></div><div id="signal-chain" class="signal-chain"></div><div class="signal-contributions" id="signal-contributions"></div><p class="signal-note">Lectura y mando virtuales. No hay conexión a un PLC físico. INICIAR y PAUSAR controlan la reproducción del ensayo calculado.</p></div></details>
           <div class="section-heading"><div><h2>Respuesta de nivel</h2><p>Las mismas condiciones iniciales. Dos estrategias.</p></div><div class="legend"><span><i class="key amber"></i> PI</span><span><i class="key teal"></i> PI + FF</span><span><i class="key dash"></i> Consigna</span></div></div>
           <div id="level-charts" class="chart-grid"></div>
-          <div class="data-note"><span>ⓘ</span><p>Resultados calculados en Python. Esta es una simulación educativa con parámetros del artículo; las curvas no son los datos experimentales publicados.</p><a href="#modelo">Ver supuestos ↗</a></div>
+          <div class="data-note"><span>ⓘ</span><p>Curvas calculadas en Python con los parámetros de la tabla 2. En Resultados puedes consultar por separado los IAE experimentales publicados en la figura 14.</p><a href="#modelo">Ver supuestos ↗</a></div>
           <div id="simulation-warnings" class="alert" hidden></div>
         </div>
         <aside class="panel controls-panel" aria-labelledby="control-title">
           <div class="control-heading"><div class="eyebrow">CONFIGURACIÓN</div><h2 id="control-title">Diseña el ensayo</h2></div>
           <form id="config-form">
             <label class="field-label" for="scenario">Escenario <span>01</span></label>
-            <select id="scenario" name="scenario"><option value="setpoint">Cambio de consigna</option><option value="disturbance">Perturbación de alimentación</option><option value="combined">Consigna y perturbación</option><option value="equilibrium">Equilibrio sin perturbaciones</option></select>
-            <p class="field-help" id="scenario-help">Las tres consignas cambian en t = 180 s; la alimentación se mantiene en 45 L/min.</p>
+            <select id="scenario" name="scenario"><option value="setpoint">Cambio de consigna</option><option value="disturbance"{% if default_scenario == 'disturbance' %} selected{% endif %}>Perturbación de alimentación</option><option value="combined">Consigna y perturbación</option><option value="equilibrium">Equilibrio sin perturbaciones</option></select>
+            <p class="field-help" id="scenario-help">En el ensayo inicial, la alimentación pasa de 45 a 60 L/min a los 180 s y las consignas se mantienen constantes.</p>
             <div class="field-row"><label>Duración <span class="input-unit"><input id="duration" type="number" min="300" max="1800" step="1" value="900" required><b>s</b></span></label><label>Primer evento <span class="input-unit"><input id="event-time" type="number" min="30" max="1500" step="1" value="180" required><b>s</b></span></label></div>
             <div class="control-divider"></div>
             <div class="field-label">Consignas después del cambio <span>02</span></div>
