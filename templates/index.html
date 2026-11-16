@@ -38,9 +38,10 @@
           </div>
           <article class="panel plant-panel">
             <div class="panel-heading"><div><h2>Banco de flotación</h2><p>La salida de una celda alimenta a la siguiente.</p></div><select id="plant-strategy" aria-label="Estrategia que se reproduce"><option value="feedforward">PI + Feedforward</option><option value="feedback">Solo PI</option></select></div>
-            <div class="plant-key"><span><i class="key teal"></i> Nivel simulado</span><span><i class="key dash"></i> Consigna</span><span class="plant-note">Esquema ilustrativo</span></div>
+            <div class="plant-key"><span><i class="key teal"></i> Nivel simulado</span><span><i class="key dash"></i> Consigna</span><select id="plant-scale" aria-label="Escala del nivel en los tanques"><option value="zoom">Nivel ampliado</option><option value="full">Altura completa · 0–45 cm</option></select></div>
             <div id="plant" class="plant" role="img" aria-label="Esquema animado de tres celdas de flotación en serie"></div>
             <div class="cell-readings" id="cell-readings"></div>
+            <p id="plant-scale-note" class="plant-key">La vista ampliada muestra el intervalo de cada celda. Δ es el cambio de nivel desde el inicio.</p>
             <div class="playback"><div class="transport"><button id="play" class="hmi-button start" aria-label="Iniciar reproducción" title="Iniciar reproducción"><i></i><span>INICIAR</span></button><button id="pause" class="hmi-button stop" aria-label="Pausar reproducción" title="Pausar reproducción"><i></i><span>PAUSAR</span></button></div><span id="play-time" class="mono">000 / 900 s</span><input type="range" id="timeline" aria-label="Tiempo de la simulación" min="0" max="900" value="0"><select id="speed" aria-label="Velocidad de reproducción"><option value="10">10×</option><option value="30" selected>30×</option><option value="60">60×</option></select></div>
             <div class="hmi-status"><span id="hmi-status-text">● Reproducción en pausa</span><button type="button" id="jump-event" class="secondary-button" hidden></button></div>
           </article>
