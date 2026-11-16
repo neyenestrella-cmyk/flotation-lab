@@ -12,3 +12,36 @@
 @media(max-width:1190px){.signals-panel>summary span{display:none}.signal-chain{gap:6px}.signal-chain>div{padding:9px}.signal-chain strong{font-size:15px}.signal-chain em{font-size:7px}.hmi-button span{display:none}.signal-contributions{gap:8px}}
 @media(max-width:700px){.signals-content{padding:0 15px 15px}.signals-panel>summary{padding:14px 15px}.signal-chain>div{padding:8px}.signal-chain strong{font-size:14px}.signal-chain strong small{font-size:7px}.signal-chain>div>span{font-size:6px;letter-spacing:.2px}.signal-chain em{font-size:6px}.signal-chain{gap:5px}.signal-chain>b{font-size:11px}.signal-top p{font-size:8px}.hmi-status{font-size:7px;padding:7px 14px}.hmi-button{padding:4px}.hmi-button i{width:15px;height:15px}.transport{gap:5px}.signal-limit{margin-left:0}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
+
+.math-lab {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+}
+.math-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: end;
+  margin: 14px 22px;
+}
+.math-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.math-controls input[type="number"] { width: 80px; padding: 9px 8px; }
+.math-controls input[type="range"] { width: 100%; margin: 8px 0; accent-color: var(--teal); }
+.math-controls .math-range { flex: 1 1 175px; }
+.math-context { display: block; margin: 12px 22px 0; color: var(--deep); font-size: 13px; }
+.math-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+  margin: 14px 22px 0;
+}
+.math-steps article { padding: 13px 15px; border-radius: 8px; background: #eef5f2; }
+.math-steps p { margin-top: 6px; color: #395552; font-size: 12px; overflow-wrap: anywhere; }
+.calibration-chart { width: min(100% - 44px, 500px); margin: 14px 22px 0; }
+.calibration-chart svg { display: block; width: 100%; fill: #486461; font: 11px var(--font); }
+#inspect-frame { display: inline-block; margin-top: 8px; font-size: 11px; }

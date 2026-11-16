@@ -5,6 +5,7 @@ const format = (v, digits=1) => Number.isFinite(v) ? v.toLocaleString("es-PE", {
 const color = {pi:"#d48a43",ff:"#118f93",sp:"#748a8b"};
 const tankXs = [139, 351, 563];
 let toastTimer, simcTimer, simcRequest=0;
+let calibrationTimer, calibrationRequest = 0;
 
 function toast(message){$("toast").textContent=message;$("toast").hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$("toast").hidden=true,3800);}
 function showView(){
@@ -12,7 +13,11 @@ function showView(){
   document.querySelectorAll(".view").forEach(el=>{const active=el.id===`view-${key}`;el.hidden=!active;el.classList.toggle("active",active);});
   document.querySelectorAll(".nav-link").forEach(el=>{const active=el.dataset.view===key;el.classList.toggle("active",active);if(active)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");});
   $("current-section").textContent={simulador:"Simulador",resultados:"Resultados",modelo:"Modelo matemático",guia:"Guía de ejecución"}[key];
-  if(key==="modelo")updateSimc();
+  if (key === "modelo") {
+    updateSimc();
+    updateCalibration();
+    renderTrace();
+  }
 }
 window.addEventListener("hashchange",()=>{showView();window.scrollTo({top:0,behavior:"instant"});});
 
@@ -63,6 +68,7 @@ async function run(){
     state.tankRanges = calculateTankRanges(result);
     $("engine-status").className="engine-status online";$("engine-status").innerHTML="<i></i> Motor Python conectado";
     renderResults();renderPlant();drawFrame();
+    resetTrace();
     $("run-state").textContent=JSON.stringify(config)===JSON.stringify(readConfig()) ? `Ensayo calculado · ${result.feedback.data.t.length} muestras · ${format((performance.now()-before)/1000,2)} s de cálculo y transferencia.` : "Ensayo calculado. Hay cambios pendientes por ejecutar.";
   }catch(error){
     $("error-banner").hidden=false;$("error-banner").textContent=error.name==="AbortError"?"El servidor tardó demasiado. Intenta ejecutar otra vez.":error.message;
@@ -211,6 +217,76 @@ function drawSignals(d,k){
   $("signal-chain").innerHTML=`<div><span>LI-${i+1} · MEDICIÓN</span><strong>${format(d.measured[k][i],2)} <small>cm</small></strong><em>SP ${format(d.setpoint[k][i],2)} cm</em></div><b>→</b><div><span>PI · ERROR</span><strong>${format(d.error[k][i],3)} <small>cm</small></strong><em>Kc ${c.kc[i]} · τi ${c.ti[i]} s</em></div><b>→</b><div><span>P-${i+1} · MANDO</span><strong>${format(d.command[k][i],2)} <small>L/min</small></strong><em>${format(d.bits[k][i],0)} cuentas · ${saturation?"SATURADO":"en rango"}</em></div>`;
   $("signal-contributions").innerHTML=`<span>Sesgo <b>${format(c.feed,1)}</b></span><span>Proporcional <b>${format(d.proportional[k][i],2)}</b></span><span>Integral <b>${format(d.integral[k][i],2)}</b></span><span>Feedforward <b>${format(d.ff[k][i],2)}</b></span><span class="signal-limit">Σ → límite [0, ${format(state.meta.pump_max[i])}] L/min</span>`;
 }
+
+function selectTraceTime(time) {
+  const duration = state.result.config.duration;
+  const second = Math.min(duration, Math.max(0, Math.round(time)));
+  $("trace-time").value = second;
+  $("trace-slider").value = second;
+  renderTrace();
+}
+
+function resetTrace() {
+  const duration = state.result.config.duration;
+  $("trace-time").max = duration;
+  $("trace-slider").max = duration;
+  $("trace-show-plant").disabled = false;
+  $("trace-steps").hidden = false;
+  $("inspect-frame").hidden = false;
+  selectTraceTime(state.result.events[0]?.t ?? 0);
+}
+
+function renderTrace() {
+  if (!state.result) return;
+  const t = Number($("trace-slider").value);
+  const cell = Number($("trace-cell").value);
+  const strategy = $("trace-strategy").value;
+  const {config, dt} = state.result;
+  const d = state.result[strategy].data;
+  const value = key => d[key][t][cell];
+  const f = (key, digits = 3) => format(value(key), digits);
+  const delay = state.meta.delays[cell];
+  const inletSource = cell === 0 ? "la alimentación del banco" : `la salida de C-${cell}`;
+  $("trace-context").textContent = `${state.meta.scenarios[config.scenario]} · C-${cell + 1} · t = ${t} s · Δt = ${dt} s`;
+  $("trace-flows").textContent = `Qentrada = ${f("inlet")} L/min de ${inletSource}. Qsalida = ${f("outlet")} L/min.`;
+  $("trace-delay").textContent = t < delay
+    ? `Qsalida usa el caudal previo al ensayo mientras transcurre el retardo de ${delay} s.`
+    : `Qsalida[t] = mando[t − ${delay} s]. El caudal mostrado viene de la orden en t = ${t - delay} s.`;
+  $("trace-error").textContent = `e = SP − nivel medido = ${f("setpoint")} − ${f("measured")} = ${f("error")} cm.`;
+  const integralNote = value("integral_held") ? " La protección contra saturación retuvo la integral." : "";
+  $("trace-pi").textContent = `P = ${format(config.kc[cell], 2)} × (${f("error")}) = ${f("proportional")} L/min. I = ${f("integral")} L/min (τi = ${format(config.ti[cell], 1)} s).${integralNote}`;
+  const ffMode = config.ff_mode === "literal" ? "FF = Kff × ΔQ" : "FF = FF anterior + Kff × ΔQ";
+  $("trace-ff").textContent = strategy === "feedback"
+    ? `ΔQ = ${f("inlet_change")} L/min. En solo PI, FF = 0 L/min.`
+    : `ΔQ = ${f("inlet_change")} L/min. ${ffMode} = ${f("ff")} L/min con Kff = ${format(config.kff[cell], 2)}.`;
+  $("trace-command").textContent = `Sesgo + P + I + FF = ${format(config.feed, 3)} + (${f("proportional")}) + (${f("integral")}) + (${f("ff")}) = ${f("raw_command")} L/min.`;
+  $("trace-limit").textContent = `Con límite de 0 a ${format(state.meta.pump_max[cell])} L/min, el mando queda en ${f("command")} L/min (${f("bits", 1)} cuentas equivalentes).`;
+  $("trace-rate").textContent = `dh/dt = ${format(Math.abs(state.meta.gain), 6)} × (${f("inlet")} − ${f("outlet")}) = ${f("level_rate", 6)} cm/s.`;
+  $("trace-next").textContent = t < config.duration
+    ? `h[${t + 1}] = ${f("level", 6)} + (${f("level_rate", 6)} × ${dt}) = ${format(d.level[t + 1][cell], 6)} cm.`
+    : `Última muestra: h[${t}] = ${f("level", 6)} cm. El ensayo termina en este instante.`;
+}
+
+async function updateCalibration() {
+  const id = ++calibrationRequest;
+  const pump = $("calibration-pump").value;
+  const counts = $("calibration-counts").value;
+  try {
+    const r = await (await api(`/api/calibration?${new URLSearchParams({pump, counts})}`)).json();
+    if (id !== calibrationRequest) return;
+    $("calibration-value").textContent = `${r.pump}: ${format(r.slope, 4)} L/min por cuenta × ${format(r.counts, 0)} cuentas = ${format(r.flow, 3)} L/min.`;
+    const plotY = flow => 120 - flow * 1.05;
+    $("calibration-line").setAttribute("d", `M53 120L408 ${plotY(r.max_flow)}`);
+    $("calibration-dot").setAttribute("cx", 53 + 355 * r.counts / r.max_counts);
+    $("calibration-dot").setAttribute("cy", plotY(r.flow));
+    $("calibration-chart").hidden = false;
+  } catch (error) {
+    if (id !== calibrationRequest) return;
+    $("calibration-value").textContent = error.message;
+    $("calibration-chart").hidden = true;
+  }
+}
+
 function pause(){state.playing=false;$("plant").classList.remove("is-playing");$("hmi-status-text").textContent="● Reproducción en pausa";$("play").classList.remove("selected");$("pause").classList.add("selected");}
 function play(){if(!state.result)return;if(state.frame>=state.config.duration)state.frame=0;state.playing=true;state.previousTime=performance.now();$("plant").classList.add("is-playing");$("hmi-status-text").textContent="● Reproduciendo ensayo calculado";$("play").classList.add("selected");$("pause").classList.remove("selected");requestAnimationFrame(tick);}
 function tick(now){if(!state.playing)return;state.frame=Math.min(state.config.duration,state.frame+(now-state.previousTime)/1000*Number($("speed").value));state.previousTime=now;drawFrame();if(state.frame>=state.config.duration){pause();$("hmi-status-text").textContent="● Ensayo finalizado";}else requestAnimationFrame(tick);}
@@ -245,6 +321,32 @@ $("plant-scale").addEventListener("change", () => {
 });
 $("simc-cell").addEventListener("change",()=>{$("simc-tau").value=[7,6,3][Number($("simc-cell").value)];updateSimc();});
 $("simc-tau").addEventListener("input",()=>{clearTimeout(simcTimer);simcTimer=setTimeout(updateSimc,300);});
+$("trace-cell").addEventListener("change", renderTrace);
+$("trace-strategy").addEventListener("change", renderTrace);
+$("trace-slider").addEventListener("input", event => selectTraceTime(Number(event.target.value)));
+$("trace-time").addEventListener("change", event => selectTraceTime(Number(event.target.value)));
+$("inspect-frame").addEventListener("click", () => {
+  $("trace-cell").value = $("signal-cell").value;
+  $("trace-strategy").value = $("plant-strategy").value;
+  selectTraceTime(Math.floor(state.frame));
+});
+$("trace-show-plant").addEventListener("click", () => {
+  pause();
+  $("signal-cell").value = $("trace-cell").value;
+  $("plant-strategy").value = $("trace-strategy").value;
+  state.frame = Number($("trace-slider").value);
+  drawFrame();
+  location.hash = "simulador";
+});
+$("calibration-pump").addEventListener("change", () => {
+  clearTimeout(calibrationTimer);
+  updateCalibration();
+});
+$("calibration-counts").addEventListener("input", () => {
+  clearTimeout(calibrationTimer);
+  calibrationRequest++;
+  calibrationTimer = setTimeout(updateCalibration, 120);
+});
 document.querySelectorAll("[data-export]").forEach(button=>button.addEventListener("click",()=>download(button.dataset.export,button)));
 $("source-details").addEventListener("toggle",async()=>{if($("source-details").open&&!$("model-source").dataset.loaded){try{$("model-source").textContent=await(await api("/api/model-source")).text();$("model-source").dataset.loaded="true";}catch(error){$("model-source").textContent=error.message;}}});
 document.addEventListener("visibilitychange",()=>{if(document.hidden)pause();});
