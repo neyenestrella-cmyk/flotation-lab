@@ -9,7 +9,7 @@ import math
 import random
 from statistics import median
 
-MODEL_VERSION = "1.0.0"
+MODEL_VERSION = "1.1.0"
 GAIN = -0.001018  # cm / (s * (L/min)), tabla 2; NO es 1/área.
 DELAYS = (7, 6, 3)  # s, tabla 2
 PUMP_SLOPES = (0.0029, 0.0033, 0.0033)  # L/min por cuenta, figura 9
@@ -24,7 +24,7 @@ SCENARIOS = {
 
 @dataclass(frozen=True)
 class Config:
-    scenario: str = "setpoint"
+    scenario: str = "disturbance"
     duration: int = 900
     event_time: int = 180
     feed: float = 45.0

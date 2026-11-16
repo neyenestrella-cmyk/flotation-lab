@@ -18,7 +18,7 @@ app.json.ensure_ascii = False
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", default_scenario=Config().scenario)
 
 
 @app.get("/health")
