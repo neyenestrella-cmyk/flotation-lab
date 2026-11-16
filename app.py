@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 
-from model import Config, compare, metadata, simc
+from model import Config, calibrate_pump, compare, metadata, simc
 
 BASE = Path(__file__).resolve().parent
 app = Flask(__name__)
@@ -46,6 +46,11 @@ def simulation():
 @app.get("/api/simc")
 def simc_values():
     return jsonify(simc(int(request.args.get("cell", "0")), float(request.args.get("tau_c", "7"))))
+
+
+@app.get("/api/calibration")
+def calibration_values():
+    return jsonify(calibrate_pump(request.args.get("pump", "P-1"), int(request.args.get("counts", "15000"))))
 
 
 @app.post("/api/export/<kind>")

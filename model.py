@@ -9,11 +9,13 @@ import math
 import random
 from statistics import median
 
-MODEL_VERSION = "1.1.0"
+MODEL_VERSION = "1.2.0"
 GAIN = -0.001018  # cm / (s * (L/min)), tabla 2; NO es 1/área.
 DELAYS = (7, 6, 3)  # s, tabla 2
 PUMP_SLOPES = (0.0029, 0.0033, 0.0033)  # L/min por cuenta, figura 9
-PUMP_MAX = tuple(slope * 28000 for slope in PUMP_SLOPES)
+FEED_PUMP_SLOPE = 0.0035  # P-4, figura 9
+CALIBRATION_MAX_COUNTS = 28000
+PUMP_MAX = tuple(slope * CALIBRATION_MAX_COUNTS for slope in PUMP_SLOPES)
 SCENARIOS = {
     "setpoint": "Cambio de consigna",
     "disturbance": "Perturbación de alimentación",
@@ -116,7 +118,11 @@ def simulate(config, use_feedforward):
     previous_inlet = [config.feed] * 3
     history = [[] for _ in range(3)]
     sensor_history = [[h[i]] * 9 for i in range(3)]
-    data = {name: [] for name in ("t", "level", "measured", "setpoint", "inlet", "outlet", "command", "bits", "ff", "proportional", "integral", "error")}
+    data = {name: [] for name in (
+        "t", "level", "measured", "setpoint", "inlet", "outlet", "command", "bits",
+        "ff", "proportional", "integral", "error", "inlet_change", "level_rate",
+        "raw_command", "integral_held",
+    )}
     iae = [0.0] * 3
     ise = [0.0] * 3
     saturated = [0] * 3
@@ -127,7 +133,10 @@ def simulate(config, use_feedforward):
         sp, feed = schedule(config, k)
         outlet = [history[i][k - DELAYS[i]] if k >= DELAYS[i] else config.feed for i in range(3)]
         inlet = [feed, outlet[0], outlet[1]]
+        inlet_change = [current - previous for current, previous in zip(inlet, previous_inlet)]
+        level_rate = [abs(GAIN) * (incoming - outgoing) for incoming, outgoing in zip(inlet, outlet)]
         commands, measurements, proportional, errors = [], [], [], []
+        raw_commands, integral_held = [], []
         for i in range(3):
             # La ventana causal utiliza únicamente mediciones presentes y pasadas.
             measurement = h[i] + rng.gauss(0, config.noise)
@@ -139,7 +148,7 @@ def simulate(config, use_feedforward):
             error = sp[i] - measurement
             errors.append(error)
             proportional.append(config.kc[i] * error)
-            delta_q = inlet[i] - previous_inlet[i]
+            delta_q = inlet_change[i]
             if not use_feedforward:
                 ff[i] = 0.0
             elif config.ff_mode == "literal":
@@ -150,9 +159,12 @@ def simulate(config, use_feedforward):
             candidate = integral[i] + delta_i
             raw = config.feed + config.kc[i] * error + candidate + ff[i]
             # Bloquear solamente la integración que empuja más allá del límite.
-            if (raw > PUMP_MAX[i] and delta_i > 0) or (raw < 0 and delta_i < 0):
+            hold_integral = (raw > PUMP_MAX[i] and delta_i > 0) or (raw < 0 and delta_i < 0)
+            if hold_integral:
                 candidate = integral[i]
                 raw = config.feed + config.kc[i] * error + candidate + ff[i]
+            raw_commands.append(raw)
+            integral_held.append(hold_integral)
             integral[i] = candidate
             command = max(0.0, min(PUMP_MAX[i], raw))
             history[i].append(command)
@@ -174,10 +186,12 @@ def simulate(config, use_feedforward):
             "command": commands, "bits": [commands[i] / PUMP_SLOPES[i] for i in range(3)],
             "ff": ff.copy(),
             "proportional": proportional, "integral": integral.copy(), "error": errors,
+            "inlet_change": inlet_change, "level_rate": level_rate,
+            "raw_command": raw_commands, "integral_held": integral_held,
         }.items():
             data[name].append(value)
         if k < config.duration:
-            h = [h[i] + abs(GAIN) * (inlet[i] - outlet[i]) for i in range(3)]
+            h = [level + rate for level, rate in zip(h, level_rate)]
         previous_inlet = inlet.copy()
     metrics = [{
         "iae": iae[i], "ise": ise[i], "max_error": max_error[i],
@@ -222,6 +236,18 @@ def metadata():
         "article": {"doi": "10.1016/j.mex.2023.102081", "year": 2023,
                     "authors": "Quintanilla, Navia, Moreno, Neethling y Brito-Parada"},
     }
+
+
+def calibrate_pump(pump, counts):
+    """Evalúa la recta publicada dentro del rango de calibración."""
+    slopes = dict(zip(("P-1", "P-2", "P-3", "P-4"), (*PUMP_SLOPES, FEED_PUMP_SLOPE)))
+    if pump not in slopes:
+        raise ValueError("Selecciona una bomba entre P-1 y P-4.")
+    if type(counts) is not int or not 0 <= counts <= CALIBRATION_MAX_COUNTS:
+        raise ValueError(f"El registro debe ser un entero entre 0 y {CALIBRATION_MAX_COUNTS} cuentas.")
+    slope = slopes[pump]
+    return {"pump": pump, "counts": counts, "slope": slope, "flow": slope * counts,
+            "max_counts": CALIBRATION_MAX_COUNTS, "max_flow": slope * CALIBRATION_MAX_COUNTS}
 
 
 def simc(cell, tau_c):
